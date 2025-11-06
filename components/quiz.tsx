@@ -22,6 +22,8 @@ export function Quiz() {
   const [feedback, setFeedback] = useState<string>("");
   const [hint, setHint] = useState<{ text: string; letter: string; length: number } | null>(null);
   const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
+  const [playerName, setPlayerName] = useState<string>("");
+  const [targetGrade, setTargetGrade] = useState<number>(6);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -35,7 +37,7 @@ export function Quiz() {
   // Memoize vocabulary items count voor "not-started" state
   const totalVocabItems = useMemo(() => getVocabularyItems().length, []);
 
-  const startQuiz = useCallback(() => {
+  const startQuiz = useCallback((name: string, grade: number) => {
     const vocabItems = getVocabularyItems();
     const shuffled = shuffleArray(vocabItems);
     setItems(shuffled);
@@ -47,6 +49,8 @@ export function Quiz() {
     setFeedback("");
     setHint(null);
     setShowCorrectAnswer(false);
+    setPlayerName(name);
+    setTargetGrade(grade);
     setQuizState("in-progress");
   }, []);
 
@@ -124,10 +128,24 @@ export function Quiz() {
     }
   }, [currentIndex, quizState]);
 
+  const openVocabManager = useCallback(() => {
+    setQuizState("vocab-manager");
+  }, []);
+
+  const closeVocabManager = useCallback(() => {
+    setQuizState("not-started");
+  }, []);
+
+  // Vocab manager state - lazy load component
+  if (quizState === "vocab-manager") {
+    const VocabManagerLazy = require("@/components/vocab-manager").VocabManager;
+    return <VocabManagerLazy onClose={closeVocabManager} />;
+  }
+
   // Not started state - lazy load component
   if (quizState === "not-started") {
     const QuizStartLazy = require("@/components/quiz-start").QuizStart;
-    return <QuizStartLazy totalVocabItems={totalVocabItems} onStartQuiz={startQuiz} />;
+    return <QuizStartLazy totalVocabItems={totalVocabItems} onStartQuiz={startQuiz} onManageVocab={openVocabManager} />;
   }
 
   // Finished state - lazy load component
@@ -144,6 +162,8 @@ export function Quiz() {
         percentage={percentage}
         cijfer={cijfer}
         wrongAnswers={wrongAnswers}
+        playerName={playerName}
+        targetGrade={targetGrade}
         onRestart={startQuiz}
       />
     );

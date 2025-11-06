@@ -93,13 +93,170 @@ export const VOCAB: VocabularyMap = {
 // Pre-computed vocabulary items (cached bij module load)
 let cachedVocabularyItems: VocabularyItem[] | null = null;
 
+// LocalStorage keys
+const CUSTOM_VOCAB_KEY = "quiz-custom-vocabulary";
+const REMOVED_VOCAB_KEY = "quiz-removed-vocabulary";
+
+/**
+ * Haal custom vocabulaire op uit localStorage
+ */
+export function getCustomVocabulary(): VocabularyMap {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = localStorage.getItem(CUSTOM_VOCAB_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Haal lijst van verwijderde standaard woorden op uit localStorage
+ */
+export function getRemovedVocabulary(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(REMOVED_VOCAB_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Sla verwijderde woorden lijst op in localStorage
+ */
+function saveRemovedVocabulary(removed: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(REMOVED_VOCAB_KEY, JSON.stringify(removed));
+    // Reset cache zodat wijzigingen zichtbaar worden
+    cachedVocabularyItems = null;
+  } catch (error) {
+    console.error("Kon verwijderde lijst niet opslaan:", error);
+  }
+}
+
+/**
+ * Sla custom vocabulaire op in localStorage
+ */
+export function saveCustomVocabulary(vocab: VocabularyMap): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CUSTOM_VOCAB_KEY, JSON.stringify(vocab));
+    // Reset cache zodat nieuwe vocabulaire wordt opgehaald
+    cachedVocabularyItems = null;
+  } catch (error) {
+    console.error("Kon vocabulaire niet opslaan:", error);
+  }
+}
+
+/**
+ * Voeg een nieuw vocabulaire item toe
+ */
+export function addVocabularyItem(latin: string, translations: string[]): void {
+  const customVocab = getCustomVocabulary();
+  customVocab[latin] = translations;
+  saveCustomVocabulary(customVocab);
+}
+
+/**
+ * Verwijder een vocabulaire item
+ * Als het een custom woord is, verwijder uit custom vocab
+ * Als het een standaard woord is, voeg toe aan removed lijst
+ */
+export function removeVocabularyItem(latin: string): void {
+  const customVocab = getCustomVocabulary();
+
+  // Check of het een custom woord is
+  if (customVocab[latin]) {
+    // Verwijder uit custom vocab
+    delete customVocab[latin];
+    saveCustomVocabulary(customVocab);
+  } else if (VOCAB[latin]) {
+    // Het is een standaard woord, voeg toe aan removed lijst
+    const removed = getRemovedVocabulary();
+    if (!removed.includes(latin)) {
+      removed.push(latin);
+      saveRemovedVocabulary(removed);
+    }
+  }
+}
+
+/**
+ * Herstel een verwijderd standaard woord
+ */
+export function restoreVocabularyItem(latin: string): void {
+  const removed = getRemovedVocabulary();
+  const index = removed.indexOf(latin);
+  if (index > -1) {
+    removed.splice(index, 1);
+    saveRemovedVocabulary(removed);
+  }
+}
+
+/**
+ * Importeer meerdere vocabulaire items in bulk
+ */
+export function importVocabularyItems(items: Array<{ latin: string; translations: string[] }>): void {
+  const customVocab = getCustomVocabulary();
+
+  items.forEach(({ latin, translations }) => {
+    if (latin && translations && translations.length > 0) {
+      customVocab[latin.trim()] = translations.map(t => t.trim()).filter(t => t.length > 0);
+    }
+  });
+
+  saveCustomVocabulary(customVocab);
+}
+
+/**
+ * Haal alle vocabulaire op (standaard + custom, exclusief removed)
+ */
+export function getAllVocabulary(): { latin: string; translations: string[]; isCustom: boolean }[] {
+  const customVocab = getCustomVocabulary();
+  const removed = getRemovedVocabulary();
+
+  const result: { latin: string; translations: string[]; isCustom: boolean }[] = [];
+
+  // Voeg standaard vocabulaire toe (exclusief removed)
+  Object.entries(VOCAB).forEach(([latin, translations]) => {
+    if (!removed.includes(latin)) {
+      result.push({ latin, translations, isCustom: false });
+    }
+  });
+
+  // Voeg custom vocabulaire toe
+  Object.entries(customVocab).forEach(([latin, translations]) => {
+    result.push({ latin, translations, isCustom: true });
+  });
+
+  return result.sort((a, b) => a.latin.localeCompare(b.latin));
+}
+
 /**
  * Converteer de vocabulary map naar een array van items
  * Met caching voor betere performance
+ * Combineert standaard vocabulaire met custom vocabulaire uit localStorage
+ * Filtert verwijderde standaard woorden eruit
  */
 export function getVocabularyItems(): VocabularyItem[] {
   if (cachedVocabularyItems === null) {
-    cachedVocabularyItems = Object.entries(VOCAB).map(([latin, translations]) => ({
+    const customVocab = getCustomVocabulary();
+    const removed = getRemovedVocabulary();
+
+    // Start met standaard vocabulaire, filter removed woorden
+    const filteredVocab: VocabularyMap = {};
+    Object.entries(VOCAB).forEach(([latin, translations]) => {
+      if (!removed.includes(latin)) {
+        filteredVocab[latin] = translations;
+      }
+    });
+
+    // Combineer met custom vocabulaire
+    const combinedVocab = { ...filteredVocab, ...customVocab };
+
+    cachedVocabularyItems = Object.entries(combinedVocab).map(([latin, translations]) => ({
       latin,
       translations,
     }));

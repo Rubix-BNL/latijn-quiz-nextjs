@@ -2,7 +2,7 @@
  * TypeScript types voor de quiz applicatie
  */
 
-export type QuizState = "not-started" | "in-progress" | "finished";
+export type QuizState = "not-started" | "in-progress" | "finished" | "vocab-manager";
 
 export type QuizItem = {
   latin: string;
@@ -39,4 +39,6 @@ export type QuizResults = {
   percentage: number;
   cijfer: number;
   wrongAnswers: WrongAnswer[];
+  playerName?: string;
+  targetGrade?: number;
 };
